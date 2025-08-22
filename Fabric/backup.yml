@@ -1,0 +1,31 @@
+# This configuration file is used to manage backups for a Minecraft server.
+
+# The maximum number of backups to keep before deleting the oldest one.
+Max backups: 5
+# The interval at which backups are created.
+Backup interval: 24h
+# How long to keep backups before they are deleted.
+Backup retention: 7d
+# The directory where backups will be stored.
+# Note: Ensure this directory exists and is writable by the server.
+Backup directory: backups
+# List of files to include in the backup.
+Files:
+  - banned-ips.json
+  - banned-players.json
+  - ops.json
+  - server.properties
+  - start_fabric-de.sh
+  - backup.yml
+  - usercache.json
+  - fabric-version.yml
+  - fabric-server-launcher.properties
+  - whitelist.json
+  - .last_backup
+  - .console_history
+# List of folders to include in the backup.
+Folders:
+  - mods
+  - world
+  - world_nether
+  - world_the_end

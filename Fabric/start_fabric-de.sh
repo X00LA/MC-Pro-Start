@@ -3,20 +3,27 @@
 # ==================================================
 #              Konfiguration
 # ==================================================
-PROJECT="paper"
-VERSION_FILE="version.yml"
+
 JAVA_ARGS="-Xms10240M -Xmx10240M -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:+ParallelRefProcEnabled -XX:+PerfDisableSharedMem -XX:+UnlockExperimentalVMOptions -XX:+UseG1GC -XX:G1HeapRegionSize=8M -XX:G1HeapWastePercent=5 -XX:G1MaxNewSizePercent=40 -XX:G1MixedGCCountTarget=4 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1NewSizePercent=30 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:G1ReservePercent=20 -XX:InitiatingHeapOccupancyPercent=15 -XX:MaxGCPauseMillis=200 -XX:MaxTenuringThreshold=1 -XX:SurvivorRatio=32 -Dusing.aikars.flags=https://mcflags.emc.gs -Daikars.new.flags=true"
 
+# Konfigurationsdateien
 BACKUP_CONFIG="backup.yml"
+FABRIC_VERSION_FILE="fabric-version.yml"
+
+# Interna
 LAST_BACKUP_FILE=".last_backup"
+MODS_DIR="mods"
+FABRIC_API_SLUG="fabric-api"
 
 # ==================================================
 #         Funktionen
 # ==================================================
 
 check_dependencies() {
-    for cmd in curl jq yq zip sha256sum date find; do
-        if ! command -v "$cmd" &> /dev/null; then
+    # Hinzugefügt: 'java' wird für den Installer benötigt.
+    for cmd in curl jq yq zip sha256sum date find java; do
+        if ! command -v "$cmd" &> /dev/null;
+ then
             echo "=================================================="
             echo "Fehler: Das erforderliche Programm '$cmd' wurde nicht gefunden."
             echo "Bitte installiere es, um die Auto-Update- und Backup-Funktion zu nutzen."
@@ -129,10 +136,12 @@ rollback_backup() {
     echo "Rollback mit Backup: $LAST_BACKUP"
     echo "Lösche aktuelle Daten (laut backup.yml)..."
 
-    for f in $FILES; do
+    for f in $FILES;
+ do
         rm -f "$f"
     done
-    for d in $FOLDERS; do
+    for d in $FOLDERS;
+ do
         rm -rf "$d"
     done
 
@@ -146,6 +155,29 @@ rollback_backup() {
 # ==================================================
 #         Hauptlogik
 # ==================================================
+
+# EULA-Prüfung zu Beginn
+if [ ! -f "eula.txt" ]; then
+    echo "=================================================="
+    echo "Minecraft EULA"
+    echo "=================================================="
+    echo "Durch das Zustimmen der EULA bestätigst du, die Bedingungen zu akzeptieren."
+    echo "EULA nachlesen: https://www.minecraft.net/de-de/eula"
+    read -p "Stimmst du der EULA zu? (j/N): " response
+    case "$response" in
+        [jJ][aA]|[jJ]) 
+            echo "eula=true" > eula.txt
+            echo "EULA akzeptiert."
+            ;;
+        *)
+            echo "Skript wird beendet. Du musst der EULA zustimmen, um den Server zu starten."
+            exit 1
+            ;;
+    esac
+    echo ""
+fi
+
+# Prüfe auf erforderliche Abhängigkeiten
 check_dependencies
 
 # Falls das Skript mit "backup" aufgerufen wird → nur Backup ausführen
@@ -162,67 +194,95 @@ fi
 
 
 echo "=================================================="
-echo "            GooberGuild-SMP1 Server Start         "
+echo "         Fabric Server Start-Skript             "
 echo "=================================================="
 echo ""
 
-# --- Update prüfen ---
-echo "Prüfe auf Server-Updates für '${PROJECT}'..."
-API_URL="https://api.papermc.io/v2/projects/${PROJECT}"
-LATEST_VERSION=$(curl -sX GET "${API_URL}" | jq -r '.versions[-1]')
+# --- Update-Logik für Fabric ---
+echo "Prüfe auf Fabric-Server-Updates..."
 
-if [ -z "$LATEST_VERSION" ] || [ "$LATEST_VERSION" == "null" ]; then
-    echo "Fehler: Konnte die neueste Version nicht abrufen."
-else
-    LATEST_BUILD=$(curl -sX GET "${API_URL}/versions/${LATEST_VERSION}" | jq -r '.builds[-1]')
-    if [ -n "$LATEST_BUILD" ] && [ "$LATEST_BUILD" != "null" ]; then
-        REMOTE_VERSION="${LATEST_VERSION}-${LATEST_BUILD}"
+# Hole neueste stabile Minecraft-Version
+MC_VERSION=$(curl -s https://meta.fabricmc.net/v2/versions/game | jq -r '[.[] | select(.stable==true)][0].version')
+if [[ -z "$MC_VERSION" || "$MC_VERSION" == "null" ]]; then
+    echo "Fehler: Konnte die neueste Minecraft-Version nicht von der Fabric-API abrufen."
+    exit 1
+fi
 
-        LOCAL_VERSION="0"
-        if [ -f "$VERSION_FILE" ]; then
-            LOCAL_VERSION=$(grep 'version:' "$VERSION_FILE" | sed 's/version: *//' | tr -d '"' | tr -d ' ')
-        fi
+# Hole neueste Fabric Loader Version für die MC_VERSION
+LOADER_JSON=$(curl -s "https://meta.fabricmc.net/v2/versions/loader/${MC_VERSION}")
+if [[ -z "$LOADER_JSON" || "$LOADER_JSON" == "[]" ]]; then
+    echo "Fehler: Konnte keine Fabric Loader Version für Minecraft ${MC_VERSION} finden."
+    exit 1
+fi
+LOADER_VERSION=$(echo "$LOADER_JSON" | jq -r '[0].loader.version')
 
-        echo "Installierte Version: ${LOCAL_VERSION:-'Keine'}"
-        echo "Neueste Version:      ${REMOTE_VERSION}"
+# Lese lokale Versionen aus der YAML-Datei
+LOCAL_MC_VERSION="0"
+LOCAL_LOADER_VERSION="0"
+if [ -f "$FABRIC_VERSION_FILE" ]; then
+    LOCAL_MC_VERSION=$(yq -r '.minecraft' "$FABRIC_VERSION_FILE" 2>/dev/null)
+    LOCAL_LOADER_VERSION=$(yq -r '.loader' "$FABRIC_VERSION_FILE" 2>/dev/null)
+fi
 
-        if [ "$LOCAL_VERSION" != "$REMOTE_VERSION" ]; then
-            echo "Update verfügbar! Vor Update wird ein Backup erstellt..."
-            create_backup
+echo "Installierte Version: MC ${LOCAL_MC_VERSION:-'Keine'} / Loader ${LOCAL_LOADER_VERSION:-'Keine'}"
+echo "Neueste Version:      MC ${MC_VERSION} / Loader ${LOADER_VERSION}"
 
-            JAR_NAME="${PROJECT}-${LATEST_VERSION}-${LATEST_BUILD}.jar"
-            DOWNLOAD_URL="${API_URL}/versions/${LATEST_VERSION}/builds/${LATEST_BUILD}/downloads/${JAR_NAME}"
+# Vergleiche Versionen und führe Update durch, wenn nötig
+if [[ "$LOCAL_MC_VERSION" != "$MC_VERSION" || "$LOCAL_LOADER_VERSION" != "$LOADER_VERSION" ]]; then
+    echo "Update verfügbar! Führe Update durch..."
+    create_backup
 
-            echo "Lade ${JAR_NAME} herunter..."
-            curl -o "${JAR_NAME}" -L "${DOWNLOAD_URL}"
-
-            EXPECTED_HASH=$(curl -s "${API_URL}/versions/${LATEST_VERSION}/builds/${LATEST_BUILD}" | jq -r ".downloads.application.sha256")
-
-            if [ -s "${JAR_NAME}" ]; then
-                echo "Prüfe Integrität..."
-                FILE_HASH=$(sha256sum "${JAR_NAME}" | awk '{print $1}')
-                if [ "$FILE_HASH" == "$EXPECTED_HASH" ]; then
-                    echo "Integrität OK. Ersetze server.jar..."
-                    rm -f server.jar
-                    mv "${JAR_NAME}" server.jar
-                    echo "version: \"${REMOTE_VERSION}\"" > "${VERSION_FILE}"
-                else
-                    echo "FEHLER: Hash stimmt nicht überein. Abbruch!"
-                    rm -f "${JAR_NAME}"
-                    exit 1
-                fi
-            else
-                echo "Fehler: Download-Datei fehlerhaft."
-                exit 1
-            fi
-        else
-            echo "Server ist bereits aktuell."
-            # Auch ohne Update → prüfen, ob nach Intervall/Retention ein Backup fällig ist
-            create_backup
-        fi
+    # Lade Fabric Installer herunter
+    INSTALLER_URL=$(curl -s https://meta.fabricmc.net/v2/versions/installer | jq -r 'map(.url)[0]')
+    if [[ -z "$INSTALLER_URL" || "$INSTALLER_URL" == "null" ]]; then
+        echo "Fehler: Konnte die URL für den Fabric Installer nicht abrufen."
+        exit 1
     fi
+    INSTALLER_JAR="fabric-installer.jar"
+    echo "Lade Fabric Installer herunter..."
+    curl -o "$INSTALLER_JAR" -L "$INSTALLER_URL"
+
+    if [ ! -f "$INSTALLER_JAR" ]; then
+        echo "Fehler: Download des Fabric Installers ist fehlgeschlagen."
+        exit 1
+    fi
+
+    # Führe Installer aus, um den Server zu erstellen/aktualisieren
+    echo "Führe Fabric Installer für Minecraft ${MC_VERSION} aus..."
+    java -jar "$INSTALLER_JAR" server -mcversion "$MC_VERSION" -downloadMinecraft
+    rm "$INSTALLER_JAR" # Lösche den Installer nach Gebrauch
+
+    # Lade die passende Fabric API Mod von Modrinth herunter
+    echo "Aktualisiere Fabric API Mod..."
+    mkdir -p "$MODS_DIR"
+    # Lösche alte Versionen der Fabric API, um Konflikte zu vermeiden
+    find "$MODS_DIR" -name "fabric-api-*.jar" -type f -delete
+    
+    # Hole die Download-URL für die neueste, kompatible Version
+    FABRIC_API_URL=$(curl -s "https://api.modrinth.com/v2/project/${FABRIC_API_SLUG}/version?game_versions=["${MC_VERSION}"]&loaders=["fabric"]" | jq -r '[0].files[] | select(.primary==true).url')
+    if [[ -z "$FABRIC_API_URL" || "$FABRIC_API_URL" == "null" ]]; then
+        echo "Warnung: Konnte die Download-URL für die Fabric API nicht finden. Eventuell ist sie für MC ${MC_VERSION} noch nicht verfügbar."
+    else
+        FABRIC_API_FILENAME=$(basename "$FABRIC_API_URL")
+        echo "Lade ${FABRIC_API_FILENAME} herunter..."
+        curl -o "${MODS_DIR}/${FABRIC_API_FILENAME}" -L "$FABRIC_API_URL"
+    fi
+
+    # Schreibe die neuen Versionen in die Tracking-Datei
+    echo "minecraft: ${MC_VERSION}" > "$FABRIC_VERSION_FILE"
+    echo "loader: ${LOADER_VERSION}" >> "$FABRIC_VERSION_FILE"
+    echo "Update abgeschlossen."
+else
+    echo "Server ist bereits aktuell."
+    # Führe trotzdem eine Backup-Prüfung durch, falls nach Intervall fällig
+    create_backup 
 fi
 
 echo ""
-echo "Starte Minecraft Server..."
-java ${JAVA_ARGS} -jar server.jar nogui
+echo "Starte Minecraft Fabric Server..."
+if [ ! -f "fabric-server-launch.jar" ]; then
+    echo "FEHLER: fabric-server-launch.jar nicht gefunden! Der Server kann nicht gestartet werden."
+    echo "Führe das Skript erneut aus, um die Installation zu versuchen."
+    exit 1
+fi
+java ${JAVA_ARGS} -jar fabric-server-launch.jar nogui

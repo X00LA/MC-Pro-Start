@@ -146,6 +146,29 @@ rollback_backup() {
 # ==================================================
 #         Main Logic
 # ==================================================
+
+# EULA-Check at first start
+if [ ! -f "eula.txt" ]; then
+    echo "=================================================="
+    echo "Minecraft EULA"
+    echo "=================================================="
+    echo "Durch das Zustimmen der EULA bestätigst du, die Bedingungen zu akzeptieren."
+    echo "EULA nachlesen: https://www.minecraft.net/de-de/eula"
+    read -p "Stimmst du der EULA zu? (j/N): " response
+    case "$response" in
+        [jJ][aA]|[jJ]) 
+            echo "eula=true" > eula.txt
+            echo "EULA akzeptiert."
+            ;;
+        *)
+            echo "Skript wird beendet. Du musst der EULA zustimmen, um den Server zu starten."
+            exit 1
+            ;;
+    esac
+    echo ""
+fi
+
+# Check for required dependencies
 check_dependencies
 
 # If the script is called with "backup" → only run backup
