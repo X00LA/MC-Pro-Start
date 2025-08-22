@@ -163,7 +163,7 @@ if [ ! -f "eula.txt" ]; then
     echo "=================================================="
     echo "Durch das Zustimmen der EULA bestätigst du, die Bedingungen zu akzeptieren."
     echo "EULA nachlesen: https://www.minecraft.net/de-de/eula"
-    read -p "Stimmst du der EULA zu? (j/N): " response
+    read -p "Stimmst du der EULA zu? (J/N): " response
     case "$response" in
         [jJ][aA]|[jJ]) 
             echo "eula=true" > eula.txt
@@ -210,11 +210,20 @@ fi
 
 # Hole neueste Fabric Loader Version für die MC_VERSION
 LOADER_JSON=$(curl -s "https://meta.fabricmc.net/v2/versions/loader/${MC_VERSION}")
+
 if [[ -z "$LOADER_JSON" || "$LOADER_JSON" == "[]" ]]; then
     echo "Fehler: Konnte keine Fabric Loader Version für Minecraft ${MC_VERSION} finden."
     exit 1
 fi
-LOADER_VERSION=$(echo "$LOADER_JSON" | jq -r '[0].loader.version')
+
+# Überprüfe die Struktur der Loader JSON-Antwort
+LOADER_VERSION=$(echo "$LOADER_JSON" | jq -r '.[0].loader.version // empty')
+
+# Überprüfe, ob die Loader-Version erfolgreich abgerufen wurde
+if [[ -z "$LOADER_VERSION" ]]; then
+    echo "Fehler: Konnte die Loader-Version nicht abrufen."
+    exit 1
+fi
 
 # Lese lokale Versionen aus der YAML-Datei
 LOCAL_MC_VERSION="0"
@@ -258,15 +267,31 @@ if [[ "$LOCAL_MC_VERSION" != "$MC_VERSION" || "$LOCAL_LOADER_VERSION" != "$LOADE
     # Lösche alte Versionen der Fabric API, um Konflikte zu vermeiden
     find "$MODS_DIR" -name "fabric-api-*.jar" -type f -delete
     
-    # Hole die Download-URL für die neueste, kompatible Version
-    FABRIC_API_URL=$(curl -s "https://api.modrinth.com/v2/project/${FABRIC_API_SLUG}/version?game_versions=["${MC_VERSION}"]&loaders=["fabric"]" | jq -r '[0].files[] | select(.primary==true).url')
-    if [[ -z "$FABRIC_API_URL" || "$FABRIC_API_URL" == "null" ]]; then
-        echo "Warnung: Konnte die Download-URL für die Fabric API nicht finden. Eventuell ist sie für MC ${MC_VERSION} noch nicht verfügbar."
-    else
-        FABRIC_API_FILENAME=$(basename "$FABRIC_API_URL")
-        echo "Lade ${FABRIC_API_FILENAME} herunter..."
-        curl -o "${MODS_DIR}/${FABRIC_API_FILENAME}" -L "$FABRIC_API_URL"
+    # Mache den API-Aufruf zu Modrinth
+    response=$(curl -G -s "https://api.modrinth.com/v2/project/${FABRIC_API_SLUG}/version" \
+        --data-urlencode "game_versions=[\"${MC_VERSION}\"]" \
+        --data-urlencode "loaders=[\"fabric\"]")
+
+    # Überprüfe die API-Antwort
+    if [ -z "$response" ]; then
+    echo "Fehler: Keine Antwort von der API erhalten."
+    exit 1
     fi
+
+    # Hole die Download-URL für die neueste, kompatible Version
+    download_url=$(echo "$response" | jq -r '.[0].files[0].url')
+
+    # Überprüfe, ob die Download-URL erfolgreich extrahiert wurde
+    if [ -z "$download_url" ]; then
+    echo "Fehler: Keine Download-URL gefunden."
+    exit 1
+    fi
+
+    # Lade die Datei herunter
+    echo "Lade Fabric API von $download_url herunter..."
+    curl -L "$download_url" -o "$MODS_DIR/fabric-api.jar"
+
+    echo "Download abgeschlossen und in $MODS_DIR/fabric-api.jar gespeichert."
 
     # Schreibe die neuen Versionen in die Tracking-Datei
     echo "minecraft: ${MC_VERSION}" > "$FABRIC_VERSION_FILE"

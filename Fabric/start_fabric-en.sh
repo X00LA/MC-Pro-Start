@@ -10,7 +10,7 @@ JAVA_ARGS="-Xms10240M -Xmx10240M -XX:+AlwaysPreTouch -XX:+DisableExplicitGC -XX:
 BACKUP_CONFIG="backup.yml"
 FABRIC_VERSION_FILE="fabric-version.yml"
 
-# Internals
+# Internal
 LAST_BACKUP_FILE=".last_backup"
 MODS_DIR="mods"
 FABRIC_API_SLUG="fabric-api"
@@ -26,7 +26,7 @@ check_dependencies() {
  then
             echo "=================================================="
             echo "Error: The required program '$cmd' was not found."
-            echo "Please install it to use the auto-update and backup function."
+            echo "Please install it to use the auto-update and backup functionality."
             echo "=================================================="
             exit 1
         fi
@@ -44,7 +44,7 @@ parse_time_to_seconds() {
     fi
 }
 
-# Backup function
+# Backup Function
 create_backup() {
     if [ ! -f "$BACKUP_CONFIG" ]; then
         echo "Backup configuration file ($BACKUP_CONFIG) not found!"
@@ -71,7 +71,7 @@ create_backup() {
     fi
 
     if [ $INTERVAL_SECONDS -gt 0 ] && [ $((CURRENT_TIME - LAST_BACKUP)) -lt $INTERVAL_SECONDS ]; then
-        echo "Skipping backup (interval $BACKUP_INTERVAL not yet reached)."
+        echo "Backup skipped (interval $BACKUP_INTERVAL not yet reached)."
         return
     fi
 
@@ -91,7 +91,7 @@ create_backup() {
     echo $CURRENT_TIME > "$LAST_BACKUP_FILE"
     echo "Backup created: $BACKUP_PATH"
 
-    # --- Delete old backups by number ---
+    # --- Delete old backups by count ---
     BACKUP_COUNT=$(ls -1t "$BACKUP_DIR"/*.zip 2>/dev/null | wc -l)
     if [ "$BACKUP_COUNT" -gt "$MAX_BACKUPS" ]; then
         DELETE_COUNT=$((BACKUP_COUNT - MAX_BACKUPS))
@@ -109,10 +109,10 @@ create_backup() {
 
 
 # ==================================================
-#         Rollback function
+#         Rollback Function
 # ==================================================
 
-# Rollback function
+# Rollback Function
 # This function restores the server to the state of the last backup.
 # It deletes the current files and folders before unpacking the backup.
 # Warning: This function deletes all current data based on the backup.yml configuration!
@@ -133,7 +133,7 @@ rollback_backup() {
         return 1
     fi
 
-    echo "Rolling back with backup: $LAST_BACKUP"
+    echo "Rollback with backup: $LAST_BACKUP"
     echo "Deleting current data (according to backup.yml)..."
 
     for f in $FILES;
@@ -148,12 +148,12 @@ rollback_backup() {
     echo "Unpacking backup..."
     unzip -o "$LAST_BACKUP" -d . > /dev/null
 
-    echo "Rollback complete."
+    echo "Rollback completed."
 }
 
 
 # ==================================================
-#         Main logic
+#         Main Logic
 # ==================================================
 
 # EULA check at the beginning
@@ -162,10 +162,10 @@ if [ ! -f "eula.txt" ]; then
     echo "Minecraft EULA"
     echo "=================================================="
     echo "By agreeing to the EULA, you confirm that you accept the terms."
-    echo "Read the EULA: https://www.minecraft.net/en-us/eula"
-    read -p "Do you agree to the EULA? (j/N): " response
+    echo "Read EULA: https://www.minecraft.net/de-de/eula"
+    read -p "Do you agree to the EULA? (Y/N): " response
     case "$response" in
-        [jJ][aA]|[jJ]) 
+        [yY][eE][sS]|[yY]) 
             echo "eula=true" > eula.txt
             echo "EULA accepted."
             ;;
@@ -180,13 +180,13 @@ fi
 # Check for required dependencies
 check_dependencies
 
-# If the script is called with "backup" → only perform backup
+# If the script is called with "backup" → only execute backup
 if [ "$1" == "backup" ]; then
     create_backup
     exit 0
 fi
 
-# If the script is called with "rollback" → only perform rollback
+# If the script is called with "rollback" → only execute rollback
 if [ "$1" == "rollback" ]; then
     rollback_backup
     exit 0
@@ -208,15 +208,24 @@ if [[ -z "$MC_VERSION" || "$MC_VERSION" == "null" ]]; then
     exit 1
 fi
 
-# Get latest Fabric Loader version for the MC_VERSION
+# Get latest Fabric Loader version for MC_VERSION
 LOADER_JSON=$(curl -s "https://meta.fabricmc.net/v2/versions/loader/${MC_VERSION}")
+
 if [[ -z "$LOADER_JSON" || "$LOADER_JSON" == "[]" ]]; then
-    echo "Error: Could not find a Fabric Loader version for Minecraft ${MC_VERSION}."
+    echo "Error: Could not find any Fabric Loader version for Minecraft ${MC_VERSION}."
     exit 1
 fi
-LOADER_VERSION=$(echo "$LOADER_JSON" | jq -r '[0].loader.version')
 
-# Read local versions from the YAML file
+# Check the structure of the Loader JSON response
+LOADER_VERSION=$(echo "$LOADER_JSON" | jq -r '.[0].loader.version // empty')
+
+# Check if the Loader version was successfully retrieved
+if [[ -z "$LOADER_VERSION" ]]; then
+    echo "Error: Could not retrieve the Loader version."
+    exit 1
+fi
+
+# Read local versions from YAML file
 LOCAL_MC_VERSION="0"
 LOCAL_LOADER_VERSION="0"
 if [ -f "$FABRIC_VERSION_FILE" ]; then
@@ -243,38 +252,54 @@ if [[ "$LOCAL_MC_VERSION" != "$MC_VERSION" || "$LOCAL_LOADER_VERSION" != "$LOADE
     curl -o "$INSTALLER_JAR" -L "$INSTALLER_URL"
 
     if [ ! -f "$INSTALLER_JAR" ]; then
-        echo "Error: Download of the Fabric Installer failed."
+        echo "Error: Download of Fabric Installer failed."
         exit 1
     fi
 
-    # Run installer to create/update the server
-    echo "Running Fabric Installer for Minecraft ${MC_VERSION}..."
+    # Execute installer to create/update the server
+    echo "Executing Fabric Installer for Minecraft ${MC_VERSION}..."
     java -jar "$INSTALLER_JAR" server -mcversion "$MC_VERSION" -downloadMinecraft
     rm "$INSTALLER_JAR" # Delete the installer after use
 
-    # Download the matching Fabric API mod from Modrinth
-    echo "Updating Fabric API mod..."
+    # Download the appropriate Fabric API Mod from Modrinth
+    echo "Updating Fabric API Mod..."
     mkdir -p "$MODS_DIR"
-    # Delete old versions of the Fabric API to avoid conflicts
+    # Delete old versions of Fabric API to avoid conflicts
     find "$MODS_DIR" -name "fabric-api-*.jar" -type f -delete
     
-    # Get the download URL for the latest, compatible version
-    FABRIC_API_URL=$(curl -s "https://api.modrinth.com/v2/project/${FABRIC_API_SLUG}/version?game_versions=["${MC_VERSION}"]&loaders=["fabric"]" | jq -r '[0].files[] | select(.primary==true).url')
-    if [[ -z "$FABRIC_API_URL" || "$FABRIC_API_URL" == "null" ]]; then
-        echo "Warning: Could not find the download URL for the Fabric API. It may not be available for MC ${MC_VERSION} yet."
-    else
-        FABRIC_API_FILENAME=$(basename "$FABRIC_API_URL")
-        echo "Downloading ${FABRIC_API_FILENAME}..."
-        curl -o "${MODS_DIR}/${FABRIC_API_FILENAME}" -L "$FABRIC_API_URL"
+    # Make API call to Modrinth
+    response=$(curl -G -s "https://api.modrinth.com/v2/project/${FABRIC_API_SLUG}/version" \
+        --data-urlencode "game_versions=[\"${MC_VERSION}\"]" \
+        --data-urlencode "loaders=[\"fabric\"]")
+
+    # Check API response
+    if [ -z "$response" ]; then
+    echo "Error: No response received from the API."
+    exit 1
     fi
 
-    # Write the new versions to the tracking file
+    # Get download URL for the latest compatible version
+    download_url=$(echo "$response" | jq -r '.[0].files[0].url')
+
+    # Check if download URL was successfully extracted
+    if [ -z "$download_url" ]; then
+    echo "Error: No download URL found."
+    exit 1
+    fi
+
+    # Download the file
+    echo "Downloading Fabric API from $download_url..."
+    curl -L "$download_url" -o "$MODS_DIR/fabric-api.jar"
+
+    echo "Download completed and saved to $MODS_DIR/fabric-api.jar."
+
+    # Write new versions to tracking file
     echo "minecraft: ${MC_VERSION}" > "$FABRIC_VERSION_FILE"
     echo "loader: ${LOADER_VERSION}" >> "$FABRIC_VERSION_FILE"
-    echo "Update complete."
+    echo "Update completed."
 else
     echo "Server is already up to date."
-    # Still perform a backup check in case it's due by interval
+    # Still perform backup check if due by interval
     create_backup 
 fi
 
@@ -282,7 +307,7 @@ echo ""
 echo "Starting Minecraft Fabric Server..."
 if [ ! -f "fabric-server-launch.jar" ]; then
     echo "ERROR: fabric-server-launch.jar not found! The server cannot be started."
-    echo "Run the script again to try the installation."
+    echo "Run the script again to attempt installation."
     exit 1
 fi
 java ${JAVA_ARGS} -jar fabric-server-launch.jar nogui
