@@ -44,9 +44,6 @@ sudo yum install curl jq yq zip
 Die grundlegenden Konfigurationsvariablen befinden sich oben im `start.sh`-Skript. Hier können Sie Ihre Java-Argumente anpassen.
 
 ```bash
-# Das herunterzuladende Projekt (z. B. paper, velocity, waterfall)
-PROJECT="paper"
-
 # Java-Argumente für den Serverstart
 JAVA_ARGS="-Xms4G -Xmx4G ..."
 ```
@@ -115,6 +112,12 @@ So stellen Sie die Serverdateien und -ordner aus dem letzten Backup wieder her:
 ```bash
 ./start.sh rollback
 ```
+
+### Eula Check
+
+Bei jedem Start prüft das Skript, ob eine eula.txt vorhanden ist. Ist dies nicht der Fall, fragt das Skript, ob die EULA akzeptiert wird oder nicht.
+Wird die EULA akzeptiert, generiert das Skript eine eula.txt mit dem Wert eula=true. Andernfalls bricht es den Vorgang ab.
+
 
 ## 📄 Lizenz
 
