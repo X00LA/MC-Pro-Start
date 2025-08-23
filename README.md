@@ -4,7 +4,7 @@ A comprehensive bash script to automate the operation and maintenance of a Paper
 
 ## ✨ Features
 
--   **🚀 Automatic Server Updates**: Checks for the latest PaperMC version (including build number) before every start.
+-   **🚀 Automatic Server Updates**: Checks for the latest PaperMC, Folia or Velocity version (including build number) before every start.
 -   **🔒 Secure & Verified Downloads**: Downloads new server JARs and verifies their integrity using SHA256 hashes to prevent corruption.
 -   **🗄️ Flexible Backup System**:
     -   Automatically creates a backup before performing a server update.
@@ -97,6 +97,11 @@ To start the server (which includes the update and backup checks):
 ./start.sh
 ```
 
+### Eula Check
+
+At every start the script checks if a eula.txt is present. If is not, the script asks if the eula is accepted or not.
+If the eula gets accepted the script generates a eula.txt with eula=true in it and if not it cancels the process.
+
 ### Create a Backup Manually
 
 To trigger the backup process without starting the server:
@@ -113,10 +118,17 @@ To restore the server files and folders from the most recent backup:
 ./start.sh rollback
 ```
 
-### Eula Check
+### Coming Soon
 
-At every start the script checks if a eula.txt is present. If is not, the script asks if the eula is accepted or not.
-If the eula gets accepted the script generates a eula.txt with eula=true in it and if not it cancels the process.
+#### Autorestart after Crash
+The script will automatically restart if the server crashes.
+
+#### Scheduled restarts every 6 hours (customizable)
+The script will automatically restart at 12 p.m., 6 a.m., 12 a.m. and 6 p.m..
+Before ever scheduled restart the script will send warning messages to the server at 10, 5, 4, 3, 2, 1 minutes, and the last one 10 seconds before the restart.
+
+#### Server Stop
+If the server gets stopped with the ```stop``` command, the script will completely shut down.
 
 ## 📄 License
 
