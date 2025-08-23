@@ -97,6 +97,11 @@ So starten Sie den Server (einschließlich der Update- und Backup-Prüfung):
 ./start.sh
 ```
 
+### Eula Check
+
+Bei jedem Start prüft das Skript, ob eine eula.txt vorhanden ist. Ist dies nicht der Fall, fragt das Skript, ob die EULA akzeptiert wird oder nicht.
+Wird die EULA akzeptiert, generiert das Skript eine eula.txt mit dem Wert eula=true. Andernfalls bricht es den Vorgang ab.
+
 ### Backup manuell erstellen
 
 So starten Sie den Backup-Prozess, ohne den Server zu starten:
@@ -113,10 +118,17 @@ So stellen Sie die Serverdateien und -ordner aus dem letzten Backup wieder her:
 ./start.sh rollback
 ```
 
-### Eula Check
+## 🚨 Demnächst verfügbar
 
-Bei jedem Start prüft das Skript, ob eine eula.txt vorhanden ist. Ist dies nicht der Fall, fragt das Skript, ob die EULA akzeptiert wird oder nicht.
-Wird die EULA akzeptiert, generiert das Skript eine eula.txt mit dem Wert eula=true. Andernfalls bricht es den Vorgang ab.
+#### Automatischer Neustart nach Absturz
+Das Skript startet automatisch neu, wenn der Server abstürzt.
+
+#### Geplante Neustarts alle 6 Stunden (anpassbar)
+Das Skript startet automatisch um 12:00 Uhr, 6:00 Uhr, 0:00 Uhr und 18:00 Uhr neu.
+Vor jedem geplanten Neustart sendet das Skript Warnmeldungen an den Server: 10, 5, 4, 3, 2, 1 Minute und die letzte 10 Sekunden vor dem Neustart.
+
+#### Serverstopp
+Wenn der Server mit dem Befehl ```stop``` gestoppt wird, wird das Skript vollständig heruntergefahren.
 
 
 ## 📄 Lizenz
