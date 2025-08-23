@@ -118,7 +118,7 @@ To restore the server files and folders from the most recent backup:
 ./start.sh rollback
 ```
 
-### Coming Soon
+### 🚨 Coming Soon
 
 #### Autorestart after Crash
 The script will automatically restart if the server crashes.
@@ -129,6 +129,7 @@ Before ever scheduled restart the script will send warning messages to the serve
 
 #### Server Stop
 If the server gets stopped with the ```stop``` command, the script will completely shut down.
+
 
 ## 📄 License
 
